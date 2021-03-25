@@ -9,8 +9,12 @@ router.get('/', function(req, res, next) {
   res.render('index', { title: 'Express' });
 });
 
-router.get('/redirect_url', (req, res, next)=> {
-  return objectController.distribute('auth', 'spotify_auth', req, res);
+router.get('/auth/spotify', function(req, res, next) {
+  return objectController.distribute('auth', 'gotoSpotifyLogin', req, res);
+});
+
+router.get('/auth/redirect', (req, res, next)=> {
+  return objectController.distribute('auth', 'authenticatedDone', req, res);
 });
 
 module.exports = router;

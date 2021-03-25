@@ -5,11 +5,15 @@ module.exports = class controller {
         'auth': authController
     };
 
-    distribute(controller, method, request, response) {
-        const current_controller = this.controllerMap[controller] || null;
+    async distribute(controller, method, request, response) {
+        const current_controller = new this.controllerMap[controller] || null;
         if (current_controller === null) {
             return response.status(400).send({message: 'Invalid controller'});
         }
-        return response.status(400).send({message: 'Success'});
+        const methods = Object.getOwnPropertyNames(this.controllerMap[controller].prototype);
+        if (methods.includes(method) === false) {
+            return response.status(400).send({message: 'Invalid method'});
+        }
+        return await current_controller[method](request, response);
     }
 }

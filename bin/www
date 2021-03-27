@@ -34,6 +34,11 @@ sslServer.on('listening', ()=> {
   onListening(port_ssl);
 });
 
+/**
+ * app settings
+ */
+// app.set('query parser', true);
+
 function normalizePort(val) {
   var port = parseInt(val, 10);
 

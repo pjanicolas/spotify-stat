@@ -38,6 +38,7 @@ sslServer.on('listening', ()=> {
  * app settings
  */
 // app.set('query parser', true);
+app.set('trust proxy', true)
 
 function normalizePort(val) {
   var port = parseInt(val, 10);

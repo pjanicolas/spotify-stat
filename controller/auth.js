@@ -1,8 +1,14 @@
 const spotifyConfig = require('../config/spotify');
+const redisBase = require('../model/redisbase');
 const axios = require('axios').default;
+const Session = require('../model/session');
 
 module.exports = class authController {
     #spotifyCredentialUrl = 'https://accounts.spotify.com/api/token';
+
+    #redisClient = null
+
+    #session = null;
 
     async gotoSpotifyLogin(request, response) {
         const scopes = spotifyConfig('SPOTIFY_SCOPES');
@@ -16,9 +22,44 @@ module.exports = class authController {
     }
 
     async authenticatedDone(request, response) {
+        this.#redisClient = new redisBase();
         const requestBody = request.query;
         const tokenResponse = await this.#requestAccessCredentials(requestBody.code);
-        return response.json(tokenResponse);
+        if (tokenResponse['error'] !== undefined) {
+            return response.status(400).send({message: 'invalid access'});
+        }
+        const userData = await this.#requestUserData(tokenResponse['token']['access_token']);
+        if (tokenResponse['error'] !== undefined) {
+            return response.status(400).send({message: 'invalid account'});
+        }
+        await this.#storeToken(`spotify:user:${userData['user']['id']}`, tokenResponse);
+        await this.#establishSession(userData['user']['id'], request, response);
+    }
+
+    async #establishSession(userId, request, response) {
+        if (this.#session === null) {
+            this.#session = new Session();
+        }
+        await this.#session.createSession(userId, request);
+        return response.redirect(`/user/${userId}`);
+
+    }
+
+    async #storeToken(key, value) {
+        if (this.#redisClient !== null) {
+            this.#redisClient.insert(key, value);
+        }
+    }
+
+    async #requestUserData(code) {
+        const header = this.createHeaders(code);
+        return await axios.get('https://api.spotify.com/v1/me', {headers: header})
+            .then((response)=> {
+                return {user: response.data};
+            })
+            .catch((error)=> {
+                return this.#returnError(error);
+            });
     }
 
     async #requestAccessCredentials(code) {
@@ -30,23 +71,31 @@ module.exports = class authController {
         const body = Object.keys(jsonBody)
             .map((key) => `${key}=${encodeURIComponent(jsonBody[key])}`)
             .join('&');
-        const header = {
-            'Authorization': `Basic ${Buffer.from(spotifyConfig('SPOTIFY_CLIENT_ID') + ':' + spotifyConfig('SPOTIFY_CLIENT_SECRET')).toString('base64')}`,
-        };
+        const header = this.createHeaders();
         return await axios.post(this.#spotifyCredentialUrl, body, {headers: header})
             .then( (response)=> {
-                return {
-                    token: response.data
-                };
+                return {token: response.data};
             })
             .catch((error)=> {
-                console.log(error);
-                return {
-                    error: {
-                        code: error.response.status,
-                        message: error.response.data
-                    }
-                };
+                return this.#returnError(error);
             });
+    }
+
+    createHeaders(access_token = null) {
+        const auth = (access_token !== null) ? `Bearer ${access_token}` : `Basic ${Buffer.from(spotifyConfig('SPOTIFY_CLIENT_ID') + ':' + spotifyConfig('SPOTIFY_CLIENT_SECRET')).toString('base64')}`;
+        return {'Authorization': auth}
+    }
+
+    #returnError(error) {
+        const error_data = {
+            error: {
+                code: error.response.status,
+                message: error.response.data
+            }
+        };
+        console.error('------');
+        console.error(error_data);
+        console.error('------');
+        return error_data;
     }
 }

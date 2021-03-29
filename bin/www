@@ -1,37 +1,44 @@
 #!/usr/bin/env node
-
-/**
- * Module dependencies.
- */
-
+require('dotenv').config();
+var fs = require('fs');
 var app = require('../app');
 var debug = require('debug')('spotify-stat:server');
-var http = require('http');
 
 /**
- * Get port from environment and store in Express.
- */
-
+* nonssl server
+*/
+var http = require('http');
 var port = normalizePort(process.env.PORT || '3000');
 app.set('port', port);
-
-/**
- * Create HTTP server.
- */
-
 var server = http.createServer(app);
-
-/**
- * Listen on provided port, on all network interfaces.
- */
-
 server.listen(port);
 server.on('error', onError);
 server.on('listening', onListening);
+server.on('listening', ()=> {
+  onListening(port);
+});
 
 /**
- * Normalize a port into a number, string, or false.
+* ssl server
+*/
+var https = require('https');
+var port_ssl = normalizePort(process.env.PORT_SSL || '443');
+app.set('port_ssl', port_ssl);
+var privateKey  = fs.readFileSync('../key.pem', 'utf8');
+var certificate = fs.readFileSync('../cert.pem', 'utf8');
+var credentials = {key: privateKey, cert: certificate};
+var sslServer = https.createServer(credentials, app);
+sslServer.listen(port_ssl);
+sslServer.on('error', onError);
+sslServer.on('listening', ()=> {
+  onListening(port_ssl);
+});
+
+/**
+ * app settings
  */
+// app.set('query parser', true);
+app.set('trust proxy', true)
 
 function normalizePort(val) {
   var port = parseInt(val, 10);
@@ -81,8 +88,9 @@ function onError(error) {
  * Event listener for HTTP server "listening" event.
  */
 
-function onListening() {
-  var addr = server.address();
+function onListening(port_value) {
+  var current_server = (port_value === port_ssl) ? sslServer : server;
+  var addr = current_server.address();
   var bind = typeof addr === 'string'
     ? 'pipe ' + addr
     : 'port ' + addr.port;
